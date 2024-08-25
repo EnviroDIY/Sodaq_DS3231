@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Changed to PC sync program to require the port number as input and to allow specifying the timezone.
+- Update workflows
 
 ### Fixed
 
