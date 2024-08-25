@@ -8,15 +8,14 @@ char weekDay[][4] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 //year, month, date, hour, min, sec and week-day(starts from 0 and goes to 6)
 //writing any non-existent time-data may interfere with normal operation of the RTC.
 //Take care of week-day also.
-DateTime dt(2011, 11, 10, 15, 18, 0, 5);
+DateTime sync_dt(2011, 11, 10, 15, 18, 0, 5);
 
-
-void setup ()
+void setup()
 {
     Serial.begin(57600);
     Wire.begin();
     rtc.begin();
-    rtc.setDateTime(dt); //Adjust date-time as defined 'dt' above
+    rtc.setDateTime(sync_dt); // Adjust date-time as defined 'sync_dt' above
 }
 
 void loop ()
