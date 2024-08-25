@@ -19,40 +19,41 @@
  *
  *********************************************************************************************** */
 
-#include <Wire.h>  //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
+#include <Wire.h>         //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
 #include <Sodaq_DS3231.h> //Sodaq's library for the DS3231: https://github.com/SodaqMoja/Sodaq_DS3231
 
 String getDateTime()
 {
   String dateTimeStr;
 
-  //Create a DateTime object from the current time
+  // Create a DateTime object from the current time
   DateTime dt(rtc.makeDateTime(rtc.now().getEpoch()));
 
-  //Convert it to a String
+  // Convert it to a String
   dt.addToString(dateTimeStr);
 
   return dateTimeStr;
 }
 
-
 /*  code to process time sync messages from the serial port   */
-#define TIME_HEADER  'T'   // Header tag for serial time sync message
+#define TIME_HEADER 'T' // Header tag for serial time sync message
 
-unsigned long processSyncMessage() {
+unsigned long processSyncMessage()
+{
   unsigned long pctime = 0L;
   const unsigned long DEFAULT_TIME = 1451606400; // Jan 1 2016 00:00:00.000
-  const unsigned long MAX_TIME = 2713910400; // Jan 1 2056 00:00:00.000
+  const unsigned long MAX_TIME = 2713910400;     // Jan 1 2056 00:00:00.000
 
-  if (Serial.find(TIME_HEADER)) {
+  if (Serial.find(TIME_HEADER))
+  {
     pctime = Serial.parseInt();
     Serial.println("Received:" + String(pctime));
-    if ( pctime < DEFAULT_TIME) // check the value is a valid time (greater than Jan 1 2016)
+    if (pctime < DEFAULT_TIME) // check the value is a valid time (greater than Jan 1 2016)
     {
       Serial.println("Time out of range");
       pctime = 0L; // return 0 to indicate that the time is not valid
     }
-    if ( pctime > MAX_TIME) // check the value is a valid time (greater than Jan 1 2016)
+    if (pctime > MAX_TIME) // check the value is a valid time (greater than Jan 1 2016)
     {
       Serial.println("Time out of range");
       pctime = 0L; // return 0 to indicate that the time is not valid
@@ -61,7 +62,6 @@ unsigned long processSyncMessage() {
   return pctime;
 }
 
-
 void syncRTCwithBatch()
 {
   // Read the timestamp from the PC's batch program
@@ -69,60 +69,60 @@ void syncRTCwithBatch()
 
   if (newTs > 0)
   {
-    //Serial.println(newTs);
 
-    // Add the timezone difference plus a few seconds
-    // to compensate for transmission and processing delay
-    //newTs += SYNC_DELAY + TIME_ZONE_SEC;
-
-    //Get the old time stamp and print out difference in times
+    // Get the old time stamp and print out difference in times
     uint32_t oldTs = rtc.now().getEpoch();
     int32_t diffTs = newTs - oldTs;
     int32_t diffTs_abs = abs(diffTs);
     Serial.println("RTC is Off by " + String(diffTs_abs) + " seconds");
 
-    //Display old and new time stamps
+    // Display old and new time stamps
     Serial.print("Updating RTC, old = " + String(oldTs));
     Serial.println(" new = " + String(newTs));
 
-    //Update the rtc
+    // Update the rtc
     rtc.setEpoch(newTs);
   }
 }
 
-
 void setup()
 {
-  //Start Serial for serial monitor
+  Wire.begin();
+  rtc.begin();
+  // Start Serial for serial monitor
   Serial.begin(57600);
-  while (!Serial) ; // wait until Arduino Serial Monitor opens
+  while (!Serial)
+    ; // wait until Arduino Serial Monitor opens
   Serial.println("Running sketch: PCsync.ino");
 }
 
 // This makes the date look all pretty
 String weekDay[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
-                     "Friday", "Saturday" };
+                    "Friday", "Saturday"};
 String charMonth[] = {"January", "February", "March", "April", "May", "June",
-                       "July", "August", "September", "October", "November",
-                       "December" };
+                      "July", "August", "September", "October", "November",
+                      "December"};
 String add02d(uint16_t val)
 {
   if (val < 10)
-    {return "0" + String(val);}
+  {
+    return "0" + String(val);
+  }
   else
-    {return String(val);}
+  {
+    return String(val);
+  }
 }
-
 
 void loop()
 {
-  //Print out current date/time
-  DateTime now = rtc.now(); //get the current date-time
+  // Print out current date/time
+  DateTime now = rtc.now(); // get the current date-time
   uint32_t ts = now.getEpoch();
   Serial.print("Current RTC Date/Time: ");
-  Serial.print(weekDay[now.dayOfWeek()-1]);
+  Serial.print(weekDay[now.dayOfWeek() - 1]);
   Serial.print(", ");
-  Serial.print(charMonth[now.month()-1]);
+  Serial.print(charMonth[now.month() - 1]);
   Serial.print(' ');
   Serial.print(now.date());
   Serial.print(", ");
@@ -137,7 +137,7 @@ void loop()
 
   if (Serial.available())
   {
-    //Sync time
+    // Sync time
     syncRTCwithBatch();
   }
   // Empty the serial buffer

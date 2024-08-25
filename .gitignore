@@ -66,3 +66,5 @@ platformio.ini
 DS3231.code-workspace
 examples/PCsync/PCsync.exe
 *.tar.gz
+examples/PCsync/python3.9/PCsync3.spec
+examples/PCsync/python3.9/dist/PCsync3.exe

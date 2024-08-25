@@ -16,37 +16,24 @@ running sync_clock_PC.ino to synchronize the RTC chip to Network Time Protocol c
 (or to local PC time is NTP is unavailable)
 """
 
-
-import datetime
+# %%
+from datetime import datetime, timezone, timedelta
 import time
-import warnings
 
 import ntplib
 import serial.tools.list_ports
 
 
-# from tzlocal import get_localzone
-
-# get local timezone
-# local_tz = get_localzone()
-
-# Set offset from unversal coordinated time (aka Greenwich Mean Time, aka UTC)
-
-UTC_offset = -5
-
-
+# %%
 def get_device_time():
     # A helper function to get the current time from a device running sync_clock_PC.ino
     device_time_str = device.readline().decode()
-    print(device_time_str)
+    print("<<<" + device_time_str, end="")
     device_rtc = int(device_time_str.split("(")[1].split(")")[0])
-    # Convert into a time-zone aware python datetime value
-    # device_rtc_unaware = datetime.datetime.utcfromtimestamp(device_rtc)
-    # device_rtc_aware = local_tz.localize(device_rtc_unaware, is_dst=False)
-    return device_rtc  # , device_rtc_aware
+    return device_rtc
 
 
-def get_pc_time(notifications=False):
+def get_pc_time(tz_offset=0, notifications=False):
     # A helper function to get the current time of either the PC or the US national time protocol servers
     # Checks for internet connection and if that is available returns the US NTP time, otherwise it
     # returns the local PC clock time.
@@ -54,62 +41,86 @@ def get_pc_time(notifications=False):
 
     try:
         c = ntplib.NTPClient()
-        response = c.request('us.pool.ntp.org', version=3)
-        utc_unix_time = response.orig_time + (UTC_offset*3600)
+        response = c.request("us.pool.ntp.org", version=3)
+        utc_unix_time = response.orig_time
         if notifications:
-            print("Using time from Network Time Protocol server us.pool.ntp.org")
+            print(
+                f"Using time from Network Time Protocol server us.pool.ntp.org: {utc_unix_time} ({datetime.fromtimestamp(utc_unix_time, tz=timezone.utc).isoformat()})"
+            )
     except:
-        ts_utc = datetime.datetime.utcnow()
-        utc_unix_time = (ts_utc - datetime.datetime(1970, 1, 1)).total_seconds()
+        ts_utc = datetime.now(timezone.utc)
+        utc_unix_time = (
+            ts_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        ).total_seconds()
         if notifications:
-            print("Using local computer time")
+            print(f"Using local computer time: {utc_unix_time} ({ts_utc.isoformat()})")
 
     # Conversions to deal with local vs. UTC time
-    # ntp_unaware = datetime.datetime.utcfromtimestamp(utc_unix_time)
-    # ntp_aware = local_tz.localize(ntp_unaware, is_dst=False)
-    # local_unix_time = (ntp_aware - datetime.datetime(1970, 1, 1)).total_seconds()
     if notifications:
-        # print "RTC chip is being set to time zone %s" % local_tz
-        print("RTC chip is being set to UTC")
+        print(f"RTC chip is being set to UTC{tz_offset if tz_offset!=0 else''}")
         print("Please account for timezones in your sketch")
-    return int(utc_unix_time)  # , ntp_aware
+    # return int(utc_unix_time + (tz_offset * 3600))
+    return int(utc_unix_time)
 
 
 def parse_device_set_response():
     # Parses the device's response to the time-setting commands
-    first_resp = device.readline().decode()  # This line should be another rep of the device datetime
-    print(first_resp)
-    sec_resp = device.readline().decode()  # This line should be "Recieved:###"
-    # print sec_resp
-    third_resp = device.readline().decode()  # This line should be "Updating RTC ..."
-    # print third_resp
-    diffts_abs = int(third_resp.split()[4])
-    setline = device.readline().decode()
-    # print setline
-    
-    oldts = int(setline.split()[7])
-    newts = int(setline.split()[4])
+    curr_repeat = "Current RTC Date/Time: "
+    set_resp = "Current RTC Date/Time: "
+    start = datetime.now()
+    # clean out any pending output
+    while set_resp.startswith(curr_repeat) and datetime.now() - start < timedelta(
+        seconds=5
+    ):
+        set_resp = device.readline().decode()
+        print("<<<" + set_resp, end="")
+
+    # wait for the offset line
+    start = datetime.now()
+    while not set_resp.startswith("RTC is Off ") and datetime.now() - start < timedelta(
+        seconds=5
+    ):
+        set_resp = device.readline().decode()
+        print("<<<" + set_resp, end="")
+    # get the offset from this line
+    diffts_abs = int(set_resp.split()[4])
+
+    # wait for the "Updating RTC line"
+    start = datetime.now()
+    while not set_resp.startswith(
+        "Updating RTC"
+    ) and datetime.now() - start < timedelta(seconds=5):
+        set_resp = device.readline().decode()
+        print("<<<" + set_resp, end="")
+
+    # the line should now be `Updating RTC, old = # new = #`
+    # parse the old and new time from this line
+    oldts = int(set_resp.split()[7])
+    newts = int(set_resp.split()[4])
+
     return oldts, newts, diffts_abs
 
 
+# %%
 # Check all available serial ports
 ports = serial.tools.list_ports.comports()
 
-# Keep only ports with the FTDI as the manufacturer
-device_ports = [
-    p for p in ports
-    if p.manufacturer == 'FTDI'
-    ]
+# %%
+# ask the user what com port to use
+comport_num = input("Enter the number of the COM port, followed by enter key")
+
+# Keep the port specified
+device_ports = [p for p in ports if p.device == f"COM{comport_num}"]
 
 # Give warnings if 0 or >1 Mayflies found
 if not device_ports:
-    print("No FTDI device found")
+    print(f"No device found at COM{comport_num}")
     input("Press Enter to Exit")
     exit()
-elif len(device_ports) > 1:
-    warnings.warn(f'Multiple FTDI devices found - using {device_ports[0].description}')
 else:
-    print(f"FTDI Device found at {device_ports[0].description}")
+    print(f"Device found at {device_ports[0].device}")
+    print(device_ports[0].description)
+    print(device_ports[0].hwid)
 
 # Open up the device serial port
 try:
@@ -120,13 +131,16 @@ except:
     input("Press Enter to Exit")
     exit()
 
+# %%
 # Wait for the device to initialize
 print("Waiting for device to initialize")
 time.sleep(2)
 timeout_time = time.time() + 10
+device.flushInput()  # flush input buffer, discarding all its contents
+device.flushOutput()  # flush output buffer, aborting current output and discard all that is in buffer
 print()
-print(device.readline().decode())
-print(device.readline().decode())
+print(f"<<< {device.readline().decode()}", end="")
+print(f"<<< {device.readline().decode()}", end="")
 
 # Check that getting expected responses from the device
 try:
@@ -137,40 +151,67 @@ except:
     input("Press Enter to Exit")
     exit()
 
+# %%
+# ask the user what com port to use
+print("I **VERY STRONGLY** recommend setting the offset to 0!!")
+print("If you really want your RTC in a local zone enter it now")
+print("For UTC use 0, for EST use -5")
+tz_offset_hours = input("Enter the timezone offset from UTC in hours (0 recommended!)")
+tz_offset_hours = int(tz_offset_hours)
+
+
+# %%
 # Send the time to the device
 print("First attempt to set the clock")
-run_time_check = datetime.datetime.now()
-device.write(("T" + str(get_pc_time(notifications=True))).encode('utf-8'))
+run_time_check = datetime.now()
+device.flushInput()  # flush input buffer, discarding all its contents
+device.flushOutput()  # flush output buffer, aborting current output and discard all that is in buffer
+unix_time_string = "T" + str(get_pc_time(tz_offset=tz_offset_hours, notifications=True))
+device.write(unix_time_string.encode("utf-8"))
+print(">>>" + unix_time_string)
 mf_resp1 = parse_device_set_response()
 print(f"Clock set to {mf_resp1[1]}")
-set_time_check = (datetime.datetime.now() - run_time_check).total_seconds()
+set_time_check = (datetime.now() - run_time_check).total_seconds()
 print(f"Setting the clock took {set_time_check} seconds")
 
 # Send the time to the device again to double-check the offsets
 print("Checking the device response offset")
-device.readline()
-unix_time_string = "T" + str(get_pc_time())
-device.write(unix_time_string.encode('utf-8'))
+device.flushInput()  # flush input buffer, discarding all its contents
+device.flushOutput()  # flush output buffer, aborting current output and discard all that is in buffer
+unix_time_string = "T" + str(get_pc_time(tz_offset=tz_offset_hours))
+device.write(unix_time_string.encode("utf-8"))
+print(">>>" + unix_time_string)
 mf_resp2 = parse_device_set_response()
 
 # Send the time to the device again adjusting for the offset
 if mf_resp2[2] > 1:
     print(f"Device takes {mf_resp2[2]} seconds to respond to the PC time set command")
     print("Re-adjusting the device clock")
-    device.readline()
-    adjusted_unix_time_string = "T" + str(get_pc_time() + set_time_check + mf_resp2[2])
-    device.write(adjusted_unix_time_string.encode('utf-8'))
+    device.flushInput()  # flush input buffer, discarding all its contents
+    device.flushOutput()  # flush output buffer, aborting current output and discard all that is in buffer
+    adjusted_unix_time_string = "T" + str(
+        get_pc_time(tz_offset=tz_offset_hours) + int(set_time_check) + mf_resp2[2]
+    )
+    device.write(adjusted_unix_time_string.encode("utf-8"))
+    print(">>>" + adjusted_unix_time_string)
 else:
     print("Device responded in less than 1 second")
     print("Re-adjusting the device clock")
-    device.readline().decode()
-    device.write(("T" + str(get_pc_time() + set_time_check)).encode('utf-8'))
+    device.flushInput()  # flush input buffer, discarding all its contents
+    device.flushOutput()  # flush output buffer, aborting current output and discard all that is in buffer
+    readjust_str = "T" + str(
+        get_pc_time(tz_offset=tz_offset_hours) + int(set_time_check)
+    )
+    device.write(readjust_str.encode("utf-8"))
+    print(">>>" + readjust_str)
 
 print("Device RTC is now within 1 second of computer or NTP clock")
 print("It is not possible to adjust the DS3231 to millisecond precision.")
-print(device.readline().decode())
+print(f"<<< {device.readline().decode()}")
 
+# %%
 device.close()
 
+# %%
 input("Press Enter to Exit")
 exit()
