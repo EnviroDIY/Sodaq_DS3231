@@ -17,11 +17,7 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' }}
     strategy:
       matrix:
-        req_workflow:
-          [
-            verify_library_structure.yaml,
-            build_examples.yaml,
-          ]
+        req_workflow: [verify_library_structure.yaml, build_examples.yaml]
     name: Wait for Checks to complete
     runs-on: ubuntu-latest
     steps:
